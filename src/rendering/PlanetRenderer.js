@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import PlanetTextureLoader from '../utils/TextureLoader.js';
+import { createAtmosphereMaterial } from './AtmosphereShader.js';
 
 /**
  * PlanetRenderer handles all Three.js rendering for the planet simulation
@@ -21,12 +23,16 @@ class PlanetRenderer {
     this.renderer = null;
     this.controls = null;
     this.planetMesh = null;
+    this.atmosphereMesh = null;
+    this.cloudMesh = null;
     this.animationId = null;
+    this.textureLoader = new PlanetTextureLoader();
 
     this.setupCamera();
     this.setupRenderer();
     this.setupLights();
     this.setupControls();
+    this.setupStarfield();
 
     // Handle window resize
     window.addEventListener('resize', () => this.onWindowResize());
@@ -38,7 +44,7 @@ class PlanetRenderer {
   setupCamera() {
     const aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-    this.camera.position.z = 15;
+    this.camera.position.set(10, 5, 15);
   }
 
   /**
@@ -51,27 +57,75 @@ class PlanetRenderer {
     });
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setClearColor(0x000011, 1); // Dark blue space background
+    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
   }
 
   /**
-   * Sets up scene lighting
+   * Sets up scene lighting with improved realism
    */
   setupLights() {
-    // Ambient light for overall illumination
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    // Ambient light for overall subtle illumination
+    const ambientLight = new THREE.AmbientLight(0x222244, 0.4);
     this.scene.add(ambientLight);
 
-    // Directional light to simulate sunlight
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    sunLight.position.set(5, 3, 5);
-    this.scene.add(sunLight);
+    // Main sun light (directional)
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+    this.sunLight.position.set(10, 5, 7);
+    this.sunLight.castShadow = true;
 
-    // Add a point light for additional highlights
-    const pointLight = new THREE.PointLight(0xffffff, 0.5);
-    pointLight.position.set(-5, -3, -5);
-    this.scene.add(pointLight);
+    // Configure shadow properties for better quality
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.camera.near = 0.5;
+    this.sunLight.shadow.camera.far = 500;
+
+    this.scene.add(this.sunLight);
+
+    // Add a subtle rim light for the dark side
+    const rimLight = new THREE.PointLight(0x4466ff, 0.3);
+    rimLight.position.set(-10, 0, -10);
+    this.scene.add(rimLight);
+
+    // Optional: Add a visual sun sphere
+    const sunGeometry = new THREE.SphereGeometry(1, 16, 16);
+    const sunMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffff88,
+      emissive: 0xffff88
+    });
+    this.sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+    this.sunMesh.position.copy(this.sunLight.position).multiplyScalar(3);
+    this.scene.add(this.sunMesh);
+  }
+
+  /**
+   * Creates a starfield background
+   */
+  setupStarfield() {
+    const starsGeometry = new THREE.BufferGeometry();
+    const starsMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.7,
+      sizeAttenuation: true
+    });
+
+    const starsVertices = [];
+    for (let i = 0; i < 10000; i++) {
+      const x = (Math.random() - 0.5) * 2000;
+      const y = (Math.random() - 0.5) * 2000;
+      const z = (Math.random() - 0.5) * 2000;
+      starsVertices.push(x, y, z);
+    }
+
+    starsGeometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(starsVertices, 3)
+    );
+
+    const starField = new THREE.Points(starsGeometry, starsMaterial);
+    this.scene.add(starField);
   }
 
   /**
@@ -81,42 +135,105 @@ class PlanetRenderer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.minDistance = 5;
+    this.controls.minDistance = 7;
     this.controls.maxDistance = 50;
+    this.controls.autoRotate = false;
+    this.controls.autoRotateSpeed = 0.5;
   }
 
   /**
-   * Creates a planet mesh with the given parameters
+   * Creates a planet mesh with enhanced visuals
    * @param {Object} params - Planet physical parameters
    * @returns {THREE.Mesh} The planet mesh
    */
   createPlanetMesh(params) {
-    // Remove existing planet if any
+    // Remove existing meshes if any
     if (this.planetMesh) {
       this.scene.remove(this.planetMesh);
       this.planetMesh.geometry.dispose();
       this.planetMesh.material.dispose();
     }
 
-    // Scale the radius for better visualization (divide by 1000 to keep it reasonable)
+    if (this.atmosphereMesh) {
+      this.scene.remove(this.atmosphereMesh);
+      this.atmosphereMesh.geometry.dispose();
+      this.atmosphereMesh.material.dispose();
+    }
+
+    if (this.cloudMesh) {
+      this.scene.remove(this.cloudMesh);
+      this.cloudMesh.geometry.dispose();
+      this.cloudMesh.material.dispose();
+    }
+
+    // Scale the radius for better visualization
     const displayRadius = params.radius / 1000;
 
-    // Create sphere geometry
+    // Create textures
+    const textures = this.textureLoader.createPlanetTextures();
+
+    // Create planet geometry
     const geometry = new THREE.SphereGeometry(displayRadius, 64, 64);
 
-    // Create material with basic Earth-like appearance
+    // Create planet material with textures
     const material = new THREE.MeshPhongMaterial({
-      color: 0x2233ff,
-      emissive: 0x112244,
-      specular: 0x333333,
-      shininess: 25,
-      flatShading: false
+      map: textures.map,
+      bumpMap: textures.bumpMap,
+      bumpScale: 0.05,
+      specularMap: textures.specularMap,
+      specular: new THREE.Color(0x333333),
+      shininess: 10
     });
 
     this.planetMesh = new THREE.Mesh(geometry, material);
+    this.planetMesh.castShadow = true;
+    this.planetMesh.receiveShadow = true;
     this.scene.add(this.planetMesh);
 
+    // Create atmosphere
+    this.createAtmosphere(displayRadius);
+
+    // Create cloud layer
+    this.createCloudLayer(displayRadius, textures.cloudMap);
+
     return this.planetMesh;
+  }
+
+  /**
+   * Creates an atmospheric glow around the planet
+   * @param {number} radius - Planet radius
+   */
+  createAtmosphere(radius) {
+    const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.15, 64, 64);
+
+    const atmosphereMaterialParams = createAtmosphereMaterial({
+      glowColor: [0.3, 0.6, 1.0],
+      coefficient: 0.1,
+      power: 4.0
+    });
+
+    const atmosphereMaterial = new THREE.ShaderMaterial(atmosphereMaterialParams);
+
+    this.atmosphereMesh = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+    this.scene.add(this.atmosphereMesh);
+  }
+
+  /**
+   * Creates a cloud layer above the planet
+   * @param {number} radius - Planet radius
+   * @param {THREE.Texture} cloudTexture - Cloud texture
+   */
+  createCloudLayer(radius, cloudTexture) {
+    const cloudGeometry = new THREE.SphereGeometry(radius * 1.01, 64, 64);
+    const cloudMaterial = new THREE.MeshPhongMaterial({
+      map: cloudTexture,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false
+    });
+
+    this.cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
+    this.scene.add(this.cloudMesh);
   }
 
   /**
@@ -127,8 +244,22 @@ class PlanetRenderer {
     if (!this.planetMesh) return;
 
     const displayRadius = radius / 1000;
+
+    // Update planet
     this.planetMesh.geometry.dispose();
     this.planetMesh.geometry = new THREE.SphereGeometry(displayRadius, 64, 64);
+
+    // Update atmosphere
+    if (this.atmosphereMesh) {
+      this.atmosphereMesh.geometry.dispose();
+      this.atmosphereMesh.geometry = new THREE.SphereGeometry(displayRadius * 1.15, 64, 64);
+    }
+
+    // Update clouds
+    if (this.cloudMesh) {
+      this.cloudMesh.geometry.dispose();
+      this.cloudMesh.geometry = new THREE.SphereGeometry(displayRadius * 1.01, 64, 64);
+    }
   }
 
   /**
@@ -137,9 +268,14 @@ class PlanetRenderer {
   animate() {
     this.animationId = requestAnimationFrame(() => this.animate());
 
-    // Rotate planet slowly
+    // Rotate planet
     if (this.planetMesh) {
-      this.planetMesh.rotation.y += 0.001;
+      this.planetMesh.rotation.y += 0.0005;
+    }
+
+    // Rotate clouds slightly faster for realism
+    if (this.cloudMesh) {
+      this.cloudMesh.rotation.y += 0.0007;
     }
 
     // Update controls
@@ -192,6 +328,16 @@ class PlanetRenderer {
     if (this.planetMesh) {
       this.planetMesh.geometry.dispose();
       this.planetMesh.material.dispose();
+    }
+
+    if (this.atmosphereMesh) {
+      this.atmosphereMesh.geometry.dispose();
+      this.atmosphereMesh.material.dispose();
+    }
+
+    if (this.cloudMesh) {
+      this.cloudMesh.geometry.dispose();
+      this.cloudMesh.material.dispose();
     }
 
     if (this.renderer) {
