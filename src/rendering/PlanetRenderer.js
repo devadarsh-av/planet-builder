@@ -144,9 +144,10 @@ class PlanetRenderer {
   /**
    * Creates a planet mesh with enhanced visuals
    * @param {Object} params - Planet physical parameters
+   * @param {Object} composition - Planet composition parameters (optional)
    * @returns {THREE.Mesh} The planet mesh
    */
-  createPlanetMesh(params) {
+  createPlanetMesh(params, composition = null) {
     // Remove existing meshes if any
     if (this.planetMesh) {
       this.scene.remove(this.planetMesh);
@@ -169,8 +170,15 @@ class PlanetRenderer {
     // Scale the radius for better visualization
     const displayRadius = params.radius / 1000;
 
-    // Create textures
-    const textures = this.textureLoader.createPlanetTextures();
+    // Get composition parameters if available
+    const textureOptions = composition ? {
+      waterCoverage: composition.water.coverage,
+      temperature: composition.surface.temperature,
+      iceCaps: composition.water.iceCaps
+    } : {};
+
+    // Create textures with composition
+    const textures = this.textureLoader.createPlanetTextures(textureOptions);
 
     // Create planet geometry
     const geometry = new THREE.SphereGeometry(displayRadius, 64, 64);
@@ -190,11 +198,15 @@ class PlanetRenderer {
     this.planetMesh.receiveShadow = true;
     this.scene.add(this.planetMesh);
 
-    // Create atmosphere
-    this.createAtmosphere(displayRadius);
+    // Create atmosphere with composition-based color
+    const atmosphereColor = composition ? composition.getAtmosphereColor() : [0.3, 0.6, 1.0];
+    this.createAtmosphere(displayRadius, atmosphereColor);
 
-    // Create cloud layer
-    this.createCloudLayer(displayRadius, textures.cloudMap);
+    // Create cloud layer (only if atmosphere has enough pressure)
+    const hasAtmosphere = !composition || composition.atmosphere.pressure > 0.1;
+    if (hasAtmosphere) {
+      this.createCloudLayer(displayRadius, textures.cloudMap);
+    }
 
     return this.planetMesh;
   }
@@ -202,12 +214,13 @@ class PlanetRenderer {
   /**
    * Creates an atmospheric glow around the planet
    * @param {number} radius - Planet radius
+   * @param {Array<number>} color - RGB color array [r, g, b] (0-1 range)
    */
-  createAtmosphere(radius) {
+  createAtmosphere(radius, color = [0.3, 0.6, 1.0]) {
     const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.15, 64, 64);
 
     const atmosphereMaterialParams = createAtmosphereMaterial({
-      glowColor: [0.3, 0.6, 1.0],
+      glowColor: color,
       coefficient: 0.1,
       power: 4.0
     });

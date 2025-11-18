@@ -1,5 +1,6 @@
 import './style.css';
 import PhysicalParameters from './parameters/PhysicalParams.js';
+import CompositionParameters, { EARTH_COMPOSITION, MARS_COMPOSITION, VENUS_COMPOSITION } from './parameters/CompositionParams.js';
 import PlanetRenderer from './rendering/PlanetRenderer.js';
 import { EARTH, MARS, JUPITER, MOON } from './utils/Constants.js';
 import * as dat from 'dat.gui';
@@ -11,6 +12,7 @@ class PlanetBuilderApp {
   constructor() {
     this.renderer = null;
     this.parameters = null;
+    this.composition = null;
     this.gui = null;
     this.guiControls = null;
 
@@ -23,12 +25,13 @@ class PlanetBuilderApp {
   init() {
     // Create default planet with Earth-like parameters
     this.parameters = new PhysicalParameters(EARTH);
+    this.composition = new CompositionParameters(EARTH_COMPOSITION);
 
     // Initialize the renderer
     this.renderer = new PlanetRenderer('app');
 
-    // Create the planet mesh
-    this.renderer.createPlanetMesh(this.parameters);
+    // Create the planet mesh with composition
+    this.renderer.createPlanetMesh(this.parameters, this.composition);
 
     // Set up GUI controls
     this.setupGUI();
@@ -41,6 +44,7 @@ class PlanetBuilderApp {
 
     console.log('Planet Builder initialized!');
     console.log(this.parameters.toString());
+    console.log(this.composition.toString());
   }
 
   /**
@@ -59,6 +63,14 @@ class PlanetBuilderApp {
       // Calculated values (read-only display)
       surfaceGravity: 0,
       escapeVelocity: 0,
+      // Composition parameters
+      waterCoverage: this.composition.water.coverage,
+      temperature: this.composition.surface.temperature,
+      iceCaps: this.composition.water.iceCaps,
+      atmospherePressure: this.composition.atmosphere.pressure,
+      CO2: this.composition.atmosphere.composition.CO2 || 0.04,
+      // Calculated composition values
+      effectiveTemp: 0,
       // Preset selection
       preset: 'Earth'
     };
@@ -88,6 +100,31 @@ class PlanetBuilderApp {
 
     physicsFolder.open();
 
+    // Composition Parameters folder
+    const compositionFolder = this.gui.addFolder('Composition Parameters');
+
+    compositionFolder.add(this.guiControls, 'waterCoverage', 0, 100)
+      .name('Water Coverage (%)')
+      .onChange((value) => this.onCompositionChange('waterCoverage', value));
+
+    compositionFolder.add(this.guiControls, 'temperature', 100, 800)
+      .name('Temperature (K)')
+      .onChange((value) => this.onCompositionChange('temperature', value));
+
+    compositionFolder.add(this.guiControls, 'iceCaps', 0, 100)
+      .name('Ice Caps (%)')
+      .onChange((value) => this.onCompositionChange('iceCaps', value));
+
+    compositionFolder.add(this.guiControls, 'atmospherePressure', 0, 10)
+      .name('Pressure (atm)')
+      .onChange((value) => this.onCompositionChange('atmospherePressure', value));
+
+    compositionFolder.add(this.guiControls, 'CO2', 0, 100)
+      .name('CO2 (%)')
+      .onChange((value) => this.onCompositionChange('CO2', value));
+
+    compositionFolder.open();
+
     // Calculated Values folder (read-only)
     const calculatedFolder = this.gui.addFolder('Calculated Properties');
 
@@ -97,6 +134,10 @@ class PlanetBuilderApp {
 
     calculatedFolder.add(this.guiControls, 'escapeVelocity')
       .name('Escape Vel (km/s)')
+      .listen();
+
+    calculatedFolder.add(this.guiControls, 'effectiveTemp')
+      .name('Effective Temp (K)')
       .listen();
 
     calculatedFolder.open();
@@ -135,12 +176,54 @@ class PlanetBuilderApp {
   }
 
   /**
+   * Handle composition parameter changes from GUI
+   * @param {string} param - Parameter name
+   * @param {number} value - New value
+   */
+  onCompositionChange(param, value) {
+    try {
+      // Update the composition parameter
+      if (param === 'waterCoverage') {
+        this.composition.water.coverage = value;
+      } else if (param === 'temperature') {
+        this.composition.surface.temperature = value;
+      } else if (param === 'iceCaps') {
+        this.composition.water.iceCaps = value;
+      } else if (param === 'atmospherePressure') {
+        this.composition.atmosphere.pressure = value;
+      } else if (param === 'CO2') {
+        this.composition.atmosphere.composition.CO2 = value;
+        // Adjust N2 to keep total at 100%
+        const others = Object.entries(this.composition.atmosphere.composition)
+          .filter(([gas]) => gas !== 'CO2' && gas !== 'N2')
+          .reduce((sum, [, pct]) => sum + pct, 0);
+        this.composition.atmosphere.composition.N2 = Math.max(0, 100 - value - others);
+      }
+
+      // Recreate the planet with new composition
+      this.renderer.createPlanetMesh(this.parameters, this.composition);
+
+      // Update calculated values
+      this.updateCalculatedValues();
+
+      console.log('Composition updated:', param, value);
+    } catch (error) {
+      console.error('Error updating composition:', error);
+    }
+  }
+
+  /**
    * Update calculated values display
    */
   updateCalculatedValues() {
     const calculated = this.parameters.getCalculatedProperties();
     this.guiControls.surfaceGravity = parseFloat(calculated.surfaceGravity.toFixed(2));
     this.guiControls.escapeVelocity = parseFloat(calculated.escapeVelocity.toFixed(2));
+
+    // Update composition calculated values
+    if (this.composition) {
+      this.guiControls.effectiveTemp = parseFloat(this.composition.getEffectiveTemperature().toFixed(1));
+    }
   }
 
   /**
@@ -148,20 +231,25 @@ class PlanetBuilderApp {
    * @param {string} presetName - Name of the preset
    */
   loadPreset(presetName) {
-    let preset;
+    let physicalPreset;
+    let compositionPreset;
 
     switch (presetName) {
       case 'Earth':
-        preset = EARTH;
+        physicalPreset = EARTH;
+        compositionPreset = EARTH_COMPOSITION;
         break;
       case 'Mars':
-        preset = MARS;
+        physicalPreset = MARS;
+        compositionPreset = MARS_COMPOSITION;
         break;
       case 'Jupiter':
-        preset = JUPITER;
+        physicalPreset = JUPITER;
+        compositionPreset = EARTH_COMPOSITION; // Gas giant, use Earth as placeholder
         break;
       case 'Moon':
-        preset = MOON;
+        physicalPreset = MOON;
+        compositionPreset = MARS_COMPOSITION; // No atmosphere like Mars
         break;
       default:
         console.error('Unknown preset:', presetName);
@@ -169,17 +257,25 @@ class PlanetBuilderApp {
     }
 
     // Update parameters
-    this.parameters = new PhysicalParameters(preset);
+    this.parameters = new PhysicalParameters(physicalPreset);
+    this.composition = new CompositionParameters(compositionPreset);
 
-    // Update GUI controls
-    this.guiControls.mass = preset.mass;
-    this.guiControls.radius = preset.radius;
-    this.guiControls.density = preset.density;
-    this.guiControls.rotationRate = preset.rotationRate;
-    this.guiControls.axialTilt = preset.axialTilt;
+    // Update GUI controls - physical
+    this.guiControls.mass = physicalPreset.mass;
+    this.guiControls.radius = physicalPreset.radius;
+    this.guiControls.density = physicalPreset.density;
+    this.guiControls.rotationRate = physicalPreset.rotationRate;
+    this.guiControls.axialTilt = physicalPreset.axialTilt;
 
-    // Update visual
-    this.renderer.updatePlanetSize(preset.radius);
+    // Update GUI controls - composition
+    this.guiControls.waterCoverage = this.composition.water.coverage;
+    this.guiControls.temperature = this.composition.surface.temperature;
+    this.guiControls.iceCaps = this.composition.water.iceCaps;
+    this.guiControls.atmospherePressure = this.composition.atmosphere.pressure;
+    this.guiControls.CO2 = this.composition.atmosphere.composition.CO2 || 0.04;
+
+    // Recreate planet with new parameters
+    this.renderer.createPlanetMesh(this.parameters, this.composition);
 
     // Update calculated values
     this.updateCalculatedValues();
@@ -189,6 +285,7 @@ class PlanetBuilderApp {
 
     console.log(`Loaded ${presetName} preset`);
     console.log(this.parameters.toString());
+    console.log(this.composition.toString());
   }
 }
 
