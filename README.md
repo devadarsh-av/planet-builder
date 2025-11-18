@@ -88,5 +88,5 @@ planet-builder/
 
 ## Contact
 
-@devadarsh-av
-@srivats242
+[**Devadarsh Arangaly Vijesh**][https://github.com/devadarsh-av]
+[**Srivats Pulumati**][https;//github.com/srivats242]
