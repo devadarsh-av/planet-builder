@@ -74,10 +74,6 @@ planet-builder/
 - **Math.js** - Mathematical operations
 - **Web Workers API** - Background calculations
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ## License
 
 [Add your license here]
@@ -92,4 +88,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Contact
 
-[Add your contact information or links]
+@devadarsh-av
+@srivats242
