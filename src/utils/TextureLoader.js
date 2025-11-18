@@ -36,27 +36,54 @@ class PlanetTextureLoader {
   }
 
   /**
-   * Create a procedural Earth-like texture
+   * Create a procedural planet texture
+   * @param {Object} options - Texture generation options
+   * @param {number} options.waterCoverage - Percentage of water coverage (0-100)
+   * @param {number} options.temperature - Surface temperature in Kelvin
+   * @param {number} options.iceCaps - Ice cap percentage (0-100)
    * @returns {THREE.Texture} Generated texture
    */
-  createEarthTexture() {
+  createPlanetTexture(options = {}) {
+    const {
+      waterCoverage = 71,
+      temperature = 288,
+      iceCaps = 3
+    } = options;
+
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
     canvas.height = 512;
     const ctx = canvas.getContext('2d');
 
-    // Create a gradient for ocean and land
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    // Determine colors based on temperature
+    const isFrozen = temperature < 273;
+    const isHot = temperature > 350;
 
-    // Ocean blue base
-    ctx.fillStyle = '#1a4d7a';
+    // Ocean/water color
+    let waterColor = '#1a4d7a'; // Blue
+    if (isFrozen) {
+      waterColor = '#d0e8ff'; // Light blue ice
+    } else if (temperature < 280) {
+      waterColor = '#2a5d8a'; // Cold dark blue
+    }
+
+    // Land color
+    let landColor = '#2d5a2f'; // Green
+    if (isHot) {
+      landColor = '#8a5a3a'; // Brown/tan desert
+    } else if (isFrozen) {
+      landColor = '#b0c0d0'; // Icy gray
+    }
+
+    // Base color (water or land depending on coverage)
+    ctx.fillStyle = waterCoverage > 50 ? waterColor : landColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Add some land masses (simplified continents)
-    ctx.fillStyle = '#2d5a2f';
+    // Add land or water masses based on coverage
+    const numPatches = 40 + Math.floor((100 - waterCoverage) / 2);
+    ctx.fillStyle = waterCoverage > 50 ? landColor : waterColor;
 
-    // Add random land patches
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < numPatches; i++) {
       const x = Math.random() * canvas.width;
       const y = Math.random() * canvas.height;
       const size = 20 + Math.random() * 80;
@@ -66,10 +93,13 @@ class PlanetTextureLoader {
       ctx.fill();
     }
 
-    // Add polar ice caps
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, 30);
-    ctx.fillRect(0, canvas.height - 30, canvas.width, 30);
+    // Add polar ice caps if temperature allows
+    if (iceCaps > 0) {
+      ctx.fillStyle = '#ffffff';
+      const capHeight = Math.floor((iceCaps / 100) * 50);
+      ctx.fillRect(0, 0, canvas.width, capHeight);
+      ctx.fillRect(0, canvas.height - capHeight, canvas.width, capHeight);
+    }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
@@ -184,11 +214,12 @@ class PlanetTextureLoader {
 
   /**
    * Create all textures needed for a planet
+   * @param {Object} options - Texture generation options
    * @returns {Object} Object containing all textures
    */
-  createPlanetTextures() {
+  createPlanetTextures(options = {}) {
     return {
-      map: this.createEarthTexture(),
+      map: this.createPlanetTexture(options),
       bumpMap: this.createBumpMap(),
       specularMap: this.createSpecularMap(),
       cloudMap: this.createCloudTexture()
