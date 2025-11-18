@@ -2,7 +2,7 @@ import './style.css';
 import PhysicalParameters from './parameters/PhysicalParams.js';
 import PlanetRenderer from './rendering/PlanetRenderer.js';
 import { EARTH, MARS, JUPITER, MOON } from './utils/Constants.js';
-import GUI from 'dat.gui';
+import * as dat from 'dat.gui';
 
 /**
  * Main application class
@@ -47,7 +47,7 @@ class PlanetBuilderApp {
    * Set up dat.GUI controls
    */
   setupGUI() {
-    this.gui = new GUI({ width: 300 });
+    this.gui = new dat.GUI({ width: 300 });
 
     // Create a controls object for dat.GUI
     this.guiControls = {
@@ -93,13 +93,11 @@ class PlanetBuilderApp {
 
     calculatedFolder.add(this.guiControls, 'surfaceGravity')
       .name('Gravity (m/s²)')
-      .listen()
-      .disable();
+      .listen();
 
     calculatedFolder.add(this.guiControls, 'escapeVelocity')
       .name('Escape Vel (km/s)')
-      .listen()
-      .disable();
+      .listen();
 
     calculatedFolder.open();
 
@@ -195,10 +193,19 @@ class PlanetBuilderApp {
 }
 
 // Initialize the app when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
+console.log('main.js loaded');
+console.log('Document ready state:', document.readyState);
+
+try {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOMContentLoaded fired');
+      new PlanetBuilderApp();
+    });
+  } else {
+    console.log('Document already loaded, initializing app');
     new PlanetBuilderApp();
-  });
-} else {
-  new PlanetBuilderApp();
+  }
+} catch (error) {
+  console.error('Error initializing app:', error);
 }
