@@ -20,28 +20,32 @@ The project is organized around three main parameter systems:
 planet-builder/
 ├── src/
 │   ├── core/
-│   │   ├── Planet.ts              # Main planet class
-│   │   └── SimulationEngine.ts    # Core simulation loop
+│   │   ├── Planet.js              # Main planet class
+│   │   └── SimulationEngine.js    # Core simulation loop
 │   ├── parameters/
-│   │   ├── PhysicalParams.ts      # Mass, radius, density, gravity
-│   │   ├── CompositionParams.ts   # Water, atmosphere, surface composition
-│   │   └── AdvancedParams.ts      # Volcanoes, magnetic field, tectonics
+│   │   ├── PhysicalParams.js      # Mass, radius, density, gravity
+│   │   ├── CompositionParams.js   # Water, atmosphere, surface composition
+│   │   └── AdvancedParams.js      # Volcanoes, magnetic field, tectonics
 │   ├── physics/
-│   │   ├── GravityCalculator.ts   # Gravitational calculations
-│   │   ├── AtmosphereModel.ts     # Atmospheric simulation
-│   │   └── ThermalModel.ts        # Temperature and heat transfer
+│   │   ├── GravityCalculator.js   # Gravitational calculations
+│   │   ├── AtmosphereModel.js     # Atmospheric simulation
+│   │   └── ThermalModel.js        # Temperature and heat transfer
 │   ├── rendering/
-│   │   ├── PlanetRenderer.ts      # Visual representation
-│   │   └── EffectsRenderer.ts     # Atmosphere, clouds, auroras
+│   │   ├── PlanetRenderer.js      # Visual representation (Three.js)
+│   │   └── EffectsRenderer.js     # Atmosphere, clouds, auroras
 │   ├── ui/
-│   │   ├── ParameterControls.ts   # UI for parameter manipulation
-│   │   └── Visualization.ts       # Data visualization components
+│   │   ├── ParameterControls.js   # UI for parameter manipulation
+│   │   └── Visualization.js       # Data visualization components
 │   └── utils/
-│       ├── Constants.ts            # Physical constants
-│       └── Validation.ts           # Parameter validation
+│       ├── Constants.js            # Physical constants
+│       └── Validation.js           # Parameter validation
 ├── public/
+│   ├── textures/                   # Planet textures
+│   ├── models/                     # 3D models
+│   └── index.html                  # Main HTML file
 ├── tests/
-└── docs/
+├── docs/
+└── package.json
 ```
 
 ## Parameter Systems
@@ -147,51 +151,89 @@ npm run lint
 # Format code
 npm run format
 
-# Type checking
-npm run type-check
-
 # Build for production
 npm run build
 ```
 
 ## Code Style
 
-### TypeScript Guidelines
+### JavaScript Guidelines
 
-- Use strict TypeScript mode
-- Prefer interfaces over types for object shapes
-- Use enums for fixed sets of values (e.g., `ActivityLevel`, `TectonicState`)
+- Use ES6+ features (classes, modules, arrow functions, destructuring)
+- Use `const` and `let` instead of `var`
+- Use object constants for fixed sets of values (e.g., `ActivityLevel`, `TectonicState`)
 - Document all public APIs with JSDoc comments
+- Follow consistent naming conventions (camelCase for variables/functions, PascalCase for classes)
+- Use async/await for asynchronous operations
 
-### Example: Parameter Interface
+### Example: Parameter Class
 
-```typescript
+```javascript
 /**
  * Physical parameters that define the basic structure of a planet
  */
-export interface PhysicalParameters {
-  /** Total mass of the planet in kilograms */
-  mass: number;
+class PhysicalParameters {
+  /**
+   * Creates a new PhysicalParameters instance
+   * @param {Object} params - Parameter object
+   * @param {number} params.mass - Total mass of the planet in kilograms
+   * @param {number} params.radius - Planetary radius in kilometers
+   * @param {number} params.density - Average density in kg/m³
+   * @param {number} params.rotationRate - Rotational period in hours
+   * @param {number} params.axialTilt - Axial tilt in degrees (0-180)
+   */
+  constructor({ mass, radius, density, rotationRate, axialTilt }) {
+    this.mass = mass;
+    this.radius = radius;
+    this.density = density;
+    this.rotationRate = rotationRate;
+    this.axialTilt = axialTilt;
+  }
 
-  /** Planetary radius in kilometers */
-  radius: number;
+  /**
+   * Calculates surface gravity
+   * @returns {number} Surface gravity in m/s²
+   */
+  calculateSurfaceGravity() {
+    const G = 6.674e-11; // Gravitational constant
+    const radiusMeters = this.radius * 1000; // Convert km to m
+    return (G * this.mass) / (radiusMeters ** 2);
+  }
 
-  /** Average density in kg/m³ */
-  density: number;
-
-  /** Rotational period in hours */
-  rotationRate: number;
-
-  /** Axial tilt in degrees (0-180) */
-  axialTilt: number;
+  /**
+   * Calculates escape velocity
+   * @returns {number} Escape velocity in km/s
+   */
+  calculateEscapeVelocity() {
+    const G = 6.674e-11;
+    const radiusMeters = this.radius * 1000;
+    return Math.sqrt((2 * G * this.mass) / radiusMeters) / 1000; // Convert to km/s
+  }
 }
 
 /**
- * Validates physical parameters and calculates derived properties
+ * Validates physical parameters
+ * @param {Object} params - Parameters to validate
+ * @returns {Object} Validation result with isValid flag and errors array
  */
-export function validatePhysicalParams(params: PhysicalParameters): ValidationResult {
-  // Implementation
+export function validatePhysicalParams(params) {
+  const errors = [];
+
+  if (!params.mass || params.mass <= 0) {
+    errors.push('Mass must be a positive number');
+  }
+
+  if (!params.radius || params.radius <= 0) {
+    errors.push('Radius must be a positive number');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
 }
+
+export default PhysicalParameters;
 ```
 
 ## Physics Calculations
@@ -235,27 +277,114 @@ Where v_thermal is the root-mean-square velocity of gas molecules.
 
 ### Example Test
 
-```typescript
+```javascript
+import { describe, it, expect } from 'vitest'; // or jest
+import PhysicalParameters from '../src/parameters/PhysicalParams.js';
+
 describe('PhysicalParameters', () => {
   it('should calculate correct surface gravity', () => {
-    const params: PhysicalParameters = {
-      mass: 5.972e24, // Earth mass
-      radius: 6371,   // Earth radius in km
-      // ... other params
-    };
+    const params = new PhysicalParameters({
+      mass: 5.972e24,      // Earth mass in kg
+      radius: 6371,        // Earth radius in km
+      density: 5515,       // Earth density in kg/m³
+      rotationRate: 24,    // 24 hours
+      axialTilt: 23.5      // Earth's axial tilt
+    });
 
-    const gravity = calculateSurfaceGravity(params);
+    const gravity = params.calculateSurfaceGravity();
     expect(gravity).toBeCloseTo(9.81, 1);
   });
+
+  it('should calculate correct escape velocity', () => {
+    const params = new PhysicalParameters({
+      mass: 5.972e24,
+      radius: 6371,
+      density: 5515,
+      rotationRate: 24,
+      axialTilt: 23.5
+    });
+
+    const escapeVelocity = params.calculateEscapeVelocity();
+    expect(escapeVelocity).toBeCloseTo(11.2, 1); // Earth's escape velocity
+  });
 });
+```
+
+## Three.js Integration
+
+### Setting Up the Renderer
+
+The rendering system uses Three.js for 3D visualization. Here's a basic setup:
+
+```javascript
+import * as THREE from 'three';
+
+class PlanetRenderer {
+  constructor(containerId) {
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById(containerId).appendChild(this.renderer.domElement);
+
+    this.camera.position.z = 5;
+  }
+
+  /**
+   * Creates a planet mesh with the given parameters
+   * @param {Object} params - Planet parameters
+   * @returns {THREE.Mesh} The planet mesh
+   */
+  createPlanetMesh(params) {
+    const geometry = new THREE.SphereGeometry(params.radius / 1000, 64, 64);
+    const material = new THREE.MeshPhongMaterial({
+      map: this.loadTexture(params.textureUrl),
+      bumpMap: this.loadTexture(params.bumpMapUrl),
+      specular: new THREE.Color('grey')
+    });
+
+    return new THREE.Mesh(geometry, material);
+  }
+
+  /**
+   * Renders the scene
+   */
+  render() {
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+```
+
+### Adding Atmospheric Effects
+
+```javascript
+/**
+ * Creates an atmospheric glow effect around the planet
+ * @param {number} radius - Planet radius
+ * @param {string} color - Atmosphere color
+ * @returns {THREE.Mesh} Atmosphere mesh
+ */
+function createAtmosphere(radius, color) {
+  const geometry = new THREE.SphereGeometry(radius * 1.1, 64, 64);
+  const material = new THREE.ShaderMaterial({
+    transparent: true,
+    side: THREE.BackSide,
+    // Add custom shaders for atmospheric scattering
+  });
+
+  return new THREE.Mesh(geometry, material);
+}
 ```
 
 ## Performance Considerations
 
 - Use web workers for heavy physics calculations
-- Implement level-of-detail for rendering
+- Implement level-of-detail (LOD) for rendering distant objects
 - Cache calculated values when parameters haven't changed
 - Consider using GPU acceleration for particle effects (volcanic plumes, aurora)
+- Use Three.js instancing for rendering multiple similar objects
+- Optimize geometry complexity based on camera distance
 
 ## Debugging
 
@@ -267,7 +396,9 @@ Enable debug mode to see:
 - Render performance metrics
 - Real-time parameter value displays
 
-```typescript
+```javascript
+import Planet from './src/core/Planet.js';
+
 const planet = new Planet(params, { debug: true });
 ```
 
@@ -301,10 +432,10 @@ const planet = new Planet(params, { debug: true });
 
 See the main README.md for contribution guidelines. When implementing new features:
 
-1. Start with the parameter interface definitions
-2. Implement validation logic
+1. Start with the parameter class definitions and structure
+2. Implement validation logic with JSDoc documentation
 3. Add physics calculations
-4. Create tests
+4. Create unit tests
 5. Update UI controls
 6. Add documentation
 

@@ -46,22 +46,33 @@ npm test
 
 ## Development
 
-This project is built with JavaScript/TypeScript.
+This project is built with JavaScript and leverages modern web technologies for 3D rendering and simulation.
 
 ### Project Structure
 
 ```
 planet-builder/
-├── src/           # Source files
-├── public/        # Static assets
-├── tests/         # Test files
-└── README.md      # This file
+├── src/
+│   ├── core/              # Core planet and simulation classes
+│   ├── parameters/        # Parameter management (physical, compositional, advanced)
+│   ├── physics/           # Physics calculations and models
+│   ├── rendering/         # Three.js rendering and visual effects
+│   ├── ui/                # User interface components
+│   └── utils/             # Helper functions and constants
+├── public/                # Static assets (textures, models, etc.)
+├── tests/                 # Test files
+├── docs/                  # Additional documentation
+├── README.md              # This file
+└── DEV.md                 # Developer documentation
 ```
 
 ## Technologies Used
 
-- JavaScript/TypeScript
-- [Add specific frameworks/libraries as you implement them]
+- **JavaScript (ES6+)** - Core language
+- **Three.js** - 3D rendering and visualization
+- **D3.js** - Data visualization (optional)
+- **Math.js** - Mathematical operations
+- **Web Workers API** - Background calculations
 
 ## Contributing
 
